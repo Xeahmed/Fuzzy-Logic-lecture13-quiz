@@ -1,0 +1,792 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lecture 13: Fuzzy Logic Quiz</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Arial', sans-serif;
+        }
+
+        body {
+            background: linear-gradient(135deg, #f4f4f9, #e0e0e0);
+            color: #333;
+            padding: 20px;
+            transition: all 0.3s ease;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        body.dark-mode {
+            background: linear-gradient(135deg, #1a1a1a, #2a2a2a);
+            color: #e0e0e0;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: auto;
+            flex: 1;
+        }
+
+        .header {
+            text-align: center;
+            padding: 20px;
+            background-color: #ffffff;
+            border-radius: 10px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+
+        body.dark-mode .header {
+            background-color: #2a2a2a;
+            box-shadow: 0 4px 10px rgba(255, 255, 255, 0.1);
+        }
+
+        .header h1 {
+            font-size: 2em;
+            margin-bottom: 10px;
+        }
+
+        .dark-mode-toggle {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 10px 15px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        .dark-mode-toggle:hover {
+            background-color: #0056b3;
+        }
+
+        .progress-bar {
+            width: 100%;
+            background-color: #e0e0e0;
+            height: 10px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            overflow: hidden;
+        }
+
+        .progress {
+            height: 100%;
+            background-color: #28a745;
+            width: 0;
+            transition: width 0.3s ease;
+        }
+
+        .question {
+            background-color: #ffffff;
+            padding: 20px;
+            margin: 15px 0;
+            border-radius: 10px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+            animation: fadeIn 0.5s ease-in;
+            direction: ltr;
+        }
+
+        body.dark-mode .question {
+            background-color: #2a2a2a;
+            box-shadow: 0 4px 10px rgba(255, 255, 255, 0.1);
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .question h3 {
+            margin-bottom: 15px;
+            font-size: 1.2em;
+        }
+
+        .options label {
+            display: block;
+            padding: 12px;
+            margin: 8px 0;
+            background-color: #f9f9f9;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.3s, transform 0.2s;
+        }
+
+        body.dark-mode .options label {
+            background-color: #3a3a3a;
+        }
+
+        .options label:hover {
+            background-color: #e0e0e0;
+            transform: scale(1.02);
+        }
+
+        body.dark-mode .options label:hover {
+            background-color: #4a4a4a;
+        }
+
+        .options input {
+            margin-right: 10px;
+        }
+
+        .feedback {
+            margin-top: 15px;
+            padding: 15px;
+            border-radius: 8px;
+            display: none;
+            direction: rtl;
+            text-align: right;
+            font-size: 1em;
+        }
+
+        .correct {
+            background-color: #d4edda;
+            color: #155724;
+        }
+
+        .wrong {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+
+        .submit-btn {
+            padding: 12px 25px;
+            background-color: #28a745;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            margin-top: 15px;
+            transition: background-color 0.3s, transform 0.2s;
+        }
+
+        .submit-btn:hover {
+            background-color: #218838;
+            transform: scale(1.1);
+            animation: bounce 0.3s;
+        }
+
+        @keyframes bounce {
+            0%, 100% { transform: scale(1.1); }
+            50% { transform: scale(1.15); }
+        }
+
+        .next-btn {
+            padding: 12px 25px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            margin-top: 15px;
+            display: none;
+            transition: background-color 0.3s;
+        }
+
+        .next-btn:hover {
+            background-color: #0056b3;
+        }
+
+        .score {
+            margin-top: 30px;
+            padding: 20px;
+            background-color: #ffffff;
+            border-radius: 10px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            display: none;
+        }
+
+        body.dark-mode .score {
+            background-color: #2a2a2a;
+            box-shadow: 0 4px 10px rgba(255, 255, 255, 0.1);
+        }
+
+        .score h2 {
+            margin-bottom: 10px;
+        }
+
+        footer {
+            text-align: center;
+            padding: 20px;
+            margin-top: auto;
+            color: #666;
+        }
+
+        body.dark-mode footer {
+            color: #aaa;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 10px;
+            }
+
+            .header h1 {
+                font-size: 1.5em;
+            }
+
+            .question {
+                padding: 15px;
+            }
+
+            .dark-mode-toggle {
+                top: 10px;
+                right: 10px;
+                padding: 8px 12px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .header h1 {
+                font-size: 1.2em;
+            }
+
+            .question h3 {
+                font-size: 1em;
+            }
+
+            .options label {
+                padding: 10px;
+            }
+
+            .submit-btn, .next-btn {
+                padding: 10px 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <button class="dark-mode-toggle" onclick="toggleDarkMode()">Toggle Dark Mode</button>
+    <div class="container">
+        <div class="header">
+            <h1>Lecture 13: Fuzzy Logic Quiz</h1>
+            <p>This quiz page was created by Eng: XE Ahmed Refat – EELU Student Sohag branch</p>
+        </div>
+        <div class="progress-bar">
+            <div class="progress" id="progress"></div>
+        </div>
+        <div id="quiz">
+            <!-- Questions will be populated by JavaScript -->
+        </div>
+        <div class="score" id="score"></div>
+    </div>
+    <footer>
+        <p>© Eng: XE Ahmed Refat – EELU Sohag</p>
+    </footer>
+
+    <script>
+        // Helper function to escape HTML characters
+        function escapeHTML(str) {
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+
+        const questions = [
+            {
+                question: "What is Fuzzy Logic?",
+                options: [
+                    "A method using only true/false values",
+                    "A reasoning method mimicking human decision-making",
+                    "A styling technique for web pages",
+                    "A database query language"
+                ],
+                correct: 1,
+                difficulty: "Easy",
+                explanation: "الـ Fuzzy Logic هو طريقة تفكير بتشبه اتخاذ القرار عند البشر، بتسمح بإمكانيات وسطية بين نعم ولا."
+            },
+            {
+                question: "Who invented Fuzzy Logic?",
+                options: [
+                    "Alan Turing",
+                    "Lotfi Zadeh",
+                    "John McCarthy",
+                    "Claude Shannon"
+                ],
+                correct: 1,
+                difficulty: "Easy",
+                explanation: "الـ Fuzzy Logic اخترعها لوتفي زاده، اللي لاحظ إن قرارات البشر بتشمل إمكانيات وسطية مش بس نعم أو لا."
+            },
+            {
+                question: "What does Fuzzy Logic allow between YES and NO?",
+                options: [
+                    "Only absolute truth",
+                    "Intermediate possibilities",
+                    "Binary values only",
+                    "No possibilities"
+                ],
+                correct: 1,
+                difficulty: "Easy",
+                explanation: "الـ Fuzzy Logic بتسمح بوجود إمكانيات وسطية زي 'ممكن نعم' أو 'ممكن لا' بين نعم ولا."
+            },
+            {
+                question: "In Fuzzy Logic, what does a value of 1.0 represent?",
+                options: [
+                    "Absolute falseness",
+                    "Absolute truth",
+                    "Uncertainty",
+                    "Partial truth"
+                ],
+                correct: 1,
+                difficulty: "Medium",
+                explanation: "في الـ Fuzzy Logic، القيمة 1.0 بتعني الحقيقة المطلقة، زي 'صح 100%'."
+            },
+            {
+                question: "Which of the following is a membership function mentioned in the lecture?",
+                options: [
+                    "Exponential",
+                    "Triangular",
+                    "Linear",
+                    "Polynomial"
+                ],
+                correct: 1,
+                difficulty: "Medium",
+                explanation: "الـ Lecture بتتكلم عن triangular، trapezoidal، وGaussian كـ membership functions، بس مافيش ذكر لـ exponential."
+            },
+            {
+                question: "What is an application of Fuzzy Logic mentioned in the lecture?",
+                options: [
+                    "Web design",
+                    "Anti-lock brakes",
+                    "Database management",
+                    "Text editing"
+                ],
+                correct: 1,
+                difficulty: "Medium",
+                explanation: "الـ Fuzzy Logic بتستخدم في الـ anti-lock brakes عند نيسسان للتحكم في الفرامل في الحالات الخطرة."
+            },
+            {
+                question: "What does the term 'fuzzy' mean in Fuzzy Logic?",
+                options: [
+                    "Clear and precise",
+                    "Vague or unclear",
+                    "Binary",
+                    "Structured"
+                ],
+                correct: 1,
+                difficulty: "Easy",
+                explanation: "كلمة 'fuzzy' بتعني غامض أو مش واضح، لأن الـ Fuzzy Logic بتتعامل مع حاجات مش دايمًا صح أو غلط."
+            },
+            {
+                question: "In the automotive speed controller example, how many levels are defined for speed?",
+                options: [
+                    "3",
+                    "4",
+                    "5",
+                    "6"
+                ],
+                correct: 2,
+                difficulty: "Medium",
+                explanation: "في مثال الـ automotive speed controller، الـ speed ليه 5 مستويات، زي ما ذكر في الـ Lecture."
+            },
+            {
+                question: "What does a membership function do in Fuzzy Logic?",
+                options: [
+                    "Stores data",
+                    "Quantifies linguistic terms graphically",
+                    "Executes queries",
+                    "Styles web pages"
+                ],
+                correct: 2,
+                difficulty: "Medium",
+                explanation: "الـ Membership Function بتحول مصطلحات لغوية زي 'سريع' أو 'بطيء' لقيم عددية بطريقة رسومية."
+            },
+            {
+                question: "What is the output variable in the automotive speed controller example?",
+                options: [
+                    "Speed",
+                    "Acceleration",
+                    "Distance",
+                    "Power"
+                ],
+                correct: 3,
+                difficulty: "Medium",
+                explanation: "الـ Output في مثال الـ automotive speed controller هو الـ power (تدفق الوقود للمحرك)."
+            },
+            {
+                question: "How does Fuzzy Logic differ from Boolean Logic?",
+                options: [
+                    "It uses only true/false values",
+                    "It allows values between 0 and 1",
+                    "It is less flexible",
+                    "It avoids uncertainty"
+                ],
+                correct: 2,
+                difficulty: "Medium",
+                explanation: "الـ Fuzzy Logic بتسمح بقيم بين 0 و1، عكس الـ Boolean Logic اللي بتعتمد على true أو false بس."
+            },
+            {
+                question: "Which company uses Fuzzy Logic in dishwashers to adjust cleaning cycles?",
+                options: [
+                    "Nissan",
+                    "Matsushita",
+                    "Toyota",
+                    "Sony"
+                ],
+                correct: 2,
+                difficulty: "Medium",
+                explanation: "الـ Lecture بتقول إن ماتسوشيتا بتستخدم الـ Fuzzy Logic في غسالات الأطباق لضبط دورة التنظيف."
+            },
+            {
+                question: "What is a key benefit of Fuzzy Logic in real-life situations?",
+                options: [
+                    "It enforces strict true/false rules",
+                    "It offers flexibility in reasoning",
+                    "It eliminates uncertainty",
+                    "It simplifies binary decisions"
+                ],
+                correct: 2,
+                difficulty: "Medium",
+                explanation: "الـ Fuzzy Logic بتوفر مرونة في التفكير لأنها بتتعامل مع الحالات الغامضة في الحياة الواقعية."
+            },
+            {
+                question: "In Fuzzy Logic, what does a value of 0.0 represent?",
+                options: [
+                    "Absolute truth",
+                    "Absolute falseness",
+                    "Partial truth",
+                    "Uncertainty"
+                ],
+                correct: 2,
+                difficulty: "Medium",
+                explanation: "القيمة 0.0 في الـ Fuzzy Logic بتعني الخطأ المطلق، يعني 'غلط 100%'."
+            },
+            {
+                question: "What type of membership function is NOT mentioned in the lecture?",
+                options: [
+                    "Gaussian",
+                    "Triangular",
+                    "Trapezoidal",
+                    "Sigmoid"
+                ],
+                correct: 3,
+                difficulty: "Medium",
+                explanation: "الـ Lecture ذكرت triangular، trapezoidal، وGaussian، بس مافيش ذكر لـ sigmoid."
+            },
+            {
+                question: "What does Fuzzy Logic help to deal with?",
+                options: [
+                    "Binary decisions",
+                    "Uncertainty",
+                    "Precise data only",
+                    "Structured queries"
+                ],
+                correct: 2,
+                difficulty: "Easy",
+                explanation: "الـ Fuzzy Logic بتساعد في التعامل مع عدم اليقين، زي الحالات اللي مش واضح فيها الإجابة."
+            },
+            {
+                question: "In the example 'Is Nick Honest?', what is a possible Fuzzy Logic value?",
+                options: [
+                    "True or False only",
+                    "Sometimes Honest (0.35)",
+                    "1 or 0 only",
+                    "No value"
+                ],
+                correct: 1,
+                difficulty: "Medium",
+                explanation: "في الـ Fuzzy Logic، ممكن نقول 'Sometimes Honest (0.35)' كقيمة وسطية، زي ما في مثال 'Is Nick Honest?'."
+            },
+            {
+                question: "What is required to determine output in a Fuzzy Logic system?",
+                options: [
+                    "A set of rules",
+                    "A single rule",
+                    "No rules",
+                    "A database"
+                ],
+                correct: 0,
+                difficulty: "Medium",
+                explanation: "لازم يكون فيه مجموعة قواعد (set of rules) عشان نحدد الـ output بناءً على الـ input في الـ Fuzzy Logic system."
+            },
+            {
+                question: "How many inputs are considered in the automotive speed controller example?",
+                options: [
+                    "2",
+                    "3",
+                    "4",
+                    "5"
+                ],
+                correct: 1,
+                difficulty: "Medium",
+                explanation: "في مثال الـ automotive speed controller، فيه 3 inputs: speed، acceleration، وdistance to destination."
+            },
+            {
+                question: "What does Fuzzy Logic resemble in its reasoning approach?",
+                options: [
+                    "Computer binary logic",
+                    "Human reasoning",
+                    "Database querying",
+                    "Web styling"
+                ],
+                correct: 1,
+                difficulty: "Easy",
+                explanation: "الـ Fuzzy Logic بتشبه التفكير البشري في طريقة اتخاذ القرار، مش بس true أو false."
+            },
+            {
+                question: "Fuzzy Logic can be implemented in hardware or software.",
+                type: "truefalse",
+                correct: true,
+                difficulty: "Easy",
+                explanation: "صح، الـ Fuzzy Logic ينفع تتطبق في الـ hardware أو الـ software أو مزيج منهم."
+            },
+            {
+                question: "Boolean Logic allows intermediate values between true and false.",
+                type: "truefalse",
+                correct: false,
+                difficulty: "Easy",
+                explanation: "غلط، الـ Boolean Logic بتعتمد على true أو false بس، من غير قيم وسطية."
+            },
+            {
+                question: "Fuzzy Logic is only used in theoretical research.",
+                type: "truefalse",
+                correct: false,
+                difficulty: "Medium",
+                explanation: "غلط، الـ Fuzzy Logic بتستخدم في تطبيقات عملية زي الـ anti-lock brakes وغسالات الأطباق."
+            },
+            {
+                question: "Membership functions in Fuzzy Logic represent fuzzy sets graphically.",
+                type: "truefalse",
+                correct: true,
+                difficulty: "Medium",
+                explanation: "صح، الـ Membership Functions بتمثل الـ fuzzy sets بطريقة رسومية، زي تحويل 'سريع' لقيمة عددية."
+            },
+            {
+                question: "Fuzzy Logic eliminates uncertainty in decision-making.",
+                type: "truefalse",
+                correct: false,
+                difficulty: "Medium",
+                explanation: "غلط، الـ Fuzzy Logic بتتعامل مع عدم اليقين، مش بتلغيه."
+            },
+            {
+                question: "The automotive speed controller example includes acceleration as an input.",
+                type: "truefalse",
+                correct: true,
+                difficulty: "Medium",
+                explanation: "صح، الـ acceleration هو واحد من الـ inputs في مثال الـ automotive speed controller."
+            },
+            {
+                question: "Fuzzy Logic systems do not require rules to determine output.",
+                type: "truefalse",
+                correct: false,
+                difficulty: "Medium",
+                explanation: "غلط، لازم يكون فيه مجموعة قواعد (set of rules) عشان نحدد الـ output في الـ Fuzzy Logic system."
+            },
+            {
+                question: "Triangular membership functions are used in Fuzzy Logic.",
+                type: "truefalse",
+                correct: true,
+                difficulty: "Easy",
+                explanation: "صح، الـ triangular membership function هي واحدة من الـ functions المذكورة في الـ Lecture."
+            },
+            {
+                question: "Fuzzy Logic is less flexible than Boolean Logic.",
+                type: "truefalse",
+                correct: false,
+                difficulty: "Medium",
+                explanation: "غلط، الـ Fuzzy Logic أكثر مرونة من الـ Boolean Logic لأنها بتتعامل مع قيم وسطية."
+            },
+            {
+                question: "Gaussian membership functions are mentioned in the lecture.",
+                type: "truefalse",
+                correct: true,
+                difficulty: "Medium",
+                explanation: "صح، الـ Gaussian membership function مذكورة في الـ Lecture مع triangular وtrapezoidal."
+            },
+            {
+                question: "Fuzzy Logic is unsuitable for handling vague concepts.",
+                type: "truefalse",
+                correct: false,
+                difficulty: "Easy",
+                explanation: "غلط، الـ Fuzzy Logic مصممة مخصوص عشان تتعامل مع المفاهيم الغامضة."
+            },
+            {
+                question: "The output in the automotive speed controller example is distance.",
+                type: "truefalse",
+                correct: false,
+                difficulty: "Medium",
+                explanation: "غلط، الـ output في المثال هو الـ power (تدفق الوقود)، مش الـ distance."
+            },
+            {
+                question: "Fuzzy Logic mimics human decision-making.",
+                type: "truefalse",
+                correct: true,
+                difficulty: "Easy",
+                explanation: "صح، الـ Fuzzy Logic بتشبه طريقة اتخاذ القرار عند البشر."
+            },
+            {
+                question: "Trapezoidal membership functions are used in Fuzzy Logic.",
+                type: "truefalse",
+                correct: true,
+                difficulty: "Medium",
+                explanation: "صح، الـ trapezoidal membership function هي واحدة من الـ functions المذكورة في الـ Lecture."
+            },
+            {
+                question: "Boolean Logic is better at handling uncertainty than Fuzzy Logic.",
+                type: "truefalse",
+                correct: false,
+                difficulty: "Medium",
+                explanation: "غلط، الـ Fuzzy Logic أفضل في التعامل مع عدم اليقين مقارنة بالـ Boolean Logic."
+            }
+        ];
+
+        let currentQuestion = 0;
+        let score = 0;
+
+        function updateProgress() {
+            const progress = document.getElementById('progress');
+            const percentage = ((currentQuestion + 1) / questions.length) * 100;
+            progress.style.width = `${percentage}%`;
+        }
+
+        function loadQuestion() {
+            const quizDiv = document.getElementById('quiz');
+            const question = questions[currentQuestion];
+            let html = `
+                <div class="question">
+                    <h3>${currentQuestion + 1}. ${escapeHTML(question.question)} (${question.difficulty})</h3>
+                    <div class="options">
+            `;
+
+            if (question.type === 'truefalse') {
+                html += `
+                    <label><input type="radio" name="answer" value="true"> True</label>
+                    <label><input type="radio" name="answer" value="false"> False</label>
+                `;
+            } else {
+                question.options.forEach((option, index) => {
+                    html += `
+                        <label><input type="radio" name="answer" value="${index}"> ${escapeHTML(option)}</label>
+                    `;
+                });
+            }
+
+            html += `
+                    </div>
+                    <button class="submit-btn" onclick="submitAnswer()">Submit</button>
+                    <div class="feedback" id="feedback"></div>
+                    <button class="next-btn" onclick="nextQuestion()">Next</button>
+                </div>
+            `;
+
+            quizDiv.innerHTML = html;
+            updateProgress();
+        }
+
+        function submitAnswer() {
+            const selected = document.querySelector('input[name="answer"]:checked');
+            const feedbackDiv = document.getElementById('feedback');
+            const question = questions[currentQuestion];
+
+            if (!selected) {
+                feedbackDiv.style.display = 'block';
+                feedbackDiv.className = 'feedback wrong';
+                feedbackDiv.innerHTML = 'من فضلك اختار إجابة!';
+                return;
+            }
+
+            const isCorrect = question.type === 'truefalse'
+                ? selected.value === question.correct.toString()
+                : parseInt(selected.value) === question.correct;
+
+            feedbackDiv.style.display = 'block';
+            feedbackDiv.className = `feedback ${isCorrect ? 'correct' : 'wrong'}`;
+            feedbackDiv.innerHTML = isCorrect
+                ? `صح! ${question.explanation}`
+                : `غلط! ${question.explanation}`;
+
+            if (isCorrect) score++;
+
+            document.querySelector('.submit-btn').style.display = 'none';
+            document.querySelector('.next-btn').style.display = 'block';
+        }
+
+        function nextQuestion() {
+            currentQuestion++;
+            if (currentQuestion < questions.length) {
+                loadQuestion();
+            } else {
+                showScore();
+            }
+        }
+
+        function showScore() {
+            const quizDiv = document.getElementById('quiz');
+            const scoreDiv = document.getElementById('score');
+            quizDiv.style.display = 'none';
+            scoreDiv.style.display = 'block';
+
+            let feedback = '';
+            const percentage = (score / questions.length) * 100;
+            if (percentage >= 80) {
+                feedback = 'ممتاز! عملت شغل عالي جداً، كمل كده!';
+            } else if (percentage >= 50) {
+                feedback = 'كويس! بس فيه مجال للتحسين، ركز أكتر.';
+            } else {
+                feedback = 'محتاج تذاكر أكتر! جرب تراجع الـ lecture تاني.';
+            }
+
+            scoreDiv.innerHTML = `
+                <h2>Your Final Score: ${score} out of ${questions.length}</h2>
+                <p>Percentage: ${percentage.toFixed(2)}%</p>
+                <p>${feedback}</p>
+            `;
+        }
+
+        function toggleDarkMode() {
+            document.body.classList.toggle('dark-mode');
+        }
+
+        // Load the first question
+        loadQuestion();
+    </script>
+</body>
+</html>
